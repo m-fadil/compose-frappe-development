@@ -1,0 +1,216 @@
+# Frappe Docker Compose Template
+# Copy file ini sebagai docker-compose.yml dan sesuaikan dengan kebutuhan project
+
+services:
+  # ============================================
+  # DATABASE SERVICE
+  # ============================================
+  mariadb:
+    image: docker.io/mariadb:11.8
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --skip-innodb-read-only-compressed
+    environment:
+      # TODO: Ubah password ini untuk production!
+      MYSQL_ROOT_PASSWORD: 123
+      MARIADB_AUTO_UPGRADE: 1
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    networks:
+      - frappe-net
+    restart: unless-stopped
+
+  # ============================================
+  # REDIS SERVICES
+  # ============================================
+  redis-cache:
+    image: docker.io/redis:alpine
+    networks:
+      - frappe-net
+    restart: unless-stopped
+
+  redis-queue:
+    image: docker.io/redis:alpine
+    networks:
+      - frappe-net
+    restart: unless-stopped
+
+  # ============================================
+  # FRAPPE INITIALIZATION
+  # ============================================
+  frappe-init:
+    image: docker.io/frappe/bench:latest
+    depends_on:
+      - mariadb
+    command:
+      - bash
+      - -c
+      - |
+        if [ ! -d "/home/frappe/frappe-bench/sites" ]; then
+          echo "Initializing bench...";
+          # TODO: Sesuaikan frappe-branch dengan versi yang diinginkan
+          bench init --skip-redis-config-generation --frappe-branch version-15 --ignore-exist frappe-bench;
+          cd frappe-bench;
+
+          echo "Configuring bench...";
+          bench set-config -g db_host mariadb;
+          bench set-config -g redis_cache redis://redis-cache:6379;
+          bench set-config -g redis_queue redis://redis-queue:6379;
+          bench set-config -g redis_socketio redis://redis-queue:6379;
+
+          echo "Creating new site...";
+          # TODO: Ubah site name, passwords, dan credentials
+          bench new-site --db-root-username root --db-root-password 123 --admin-password admin --mariadb-user-host-login-scope="%" development.localhost;
+
+          echo "Setting developer mode...";
+          bench use development.localhost;
+          bench set-config developer_mode 1;
+          bench clear-cache;
+          bench setup nginx;
+
+          echo "Initialization complete!";
+        else
+          echo "Bench already initialized, skipping...";
+        fi
+        echo "Exiting frappe-init container...";
+        exit 0
+    userns_mode: keep-id
+    environment:
+      - SHELL=/bin/bash
+    volumes:
+      - frappe-bench-data:/home/frappe/frappe-bench
+    working_dir: /home/frappe
+    networks:
+      - frappe-net
+
+  # ============================================
+  # FRAPPE MAIN SERVICE
+  # ============================================
+  frappe:
+    image: docker.io/frappe/bench:latest
+    depends_on:
+      frappe-init:
+        condition: service_completed_successfully
+    command: sleep infinity
+    userns_mode: keep-id
+    environment:
+      - SHELL=/bin/bash
+    volumes:
+      - frappe-bench-data:/home/frappe/frappe-bench
+      # TODO: Mount custom apps di sini
+      # Format: /path/di/host:/home/frappe/frappe-bench/apps/app_name:z
+      # Contoh:
+      # - /home/user/Projects/frappe/apps/frappe:/home/frappe/frappe-bench/apps/frappe:z
+      # - /home/user/Projects/frappe/apps/your_app:/home/frappe/frappe-bench/apps/your_app:z
+    working_dir: /home/frappe/frappe-bench
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    # TODO: Uncomment untuk expose ports
+    # ports:
+    #   - "8000:8000"  # Frontend
+    #   - "9000:9000"  # Backend/Socketio
+    networks:
+      - frappe-net
+    restart: unless-stopped
+
+  # ============================================
+  # NGINX WEB SERVER
+  # ============================================
+  nginx:
+    image: docker.io/nginx:stable-perl
+    restart: unless-stopped
+    depends_on:
+      frappe-init:
+        condition: service_completed_successfully
+    networks:
+      - frappe-net
+    volumes:
+      - frappe-bench-data:/home/frappe/frappe-bench:z,ro
+      - nginx-data:/etc/nginx/conf.d
+    ports:
+      - "80:80"
+      # TODO: Uncomment untuk HTTPS
+      # - "443:443"
+    command:
+      - /bin/sh
+      - -c
+      - |
+        if [ ! -f /etc/nginx/conf.d/frappe.conf ]; then
+          echo "frappe.conf not found, creating symlink...";
+          ln -sf /home/frappe/frappe-bench/config/nginx.conf /etc/nginx/conf.d/frappe.conf;
+        else
+          echo "frappe.conf already exists. Skipping symlink.";
+        fi;
+
+        nginx -g "daemon off;";
+
+  # ============================================
+  # CLOUDFLARE TUNNEL (OPTIONAL)
+  # ============================================
+  # cloudflared:
+  #   image: docker.io/cloudflare/cloudflared:latest
+  #   restart: unless-stopped
+  #   networks:
+  #     - frappe-net
+  #   command: tunnel --no-autoupdate run --token YOUR_CLOUDFLARE_TUNNEL_TOKEN_HERE
+
+# ============================================
+# VOLUMES
+# ============================================
+volumes:
+  mariadb-data:
+    # Persistent storage untuk database
+  frappe-bench-data:
+    # Persistent storage untuk frappe bench
+  nginx-data:
+    # Persistent storage untuk nginx config
+
+# ============================================
+# NETWORKS
+# ============================================
+networks:
+  frappe-net:
+    driver: bridge
+
+# ============================================
+# CATATAN KONFIGURASI
+# ============================================
+# 
+# 1. SECURITY:
+#    - Ubah MYSQL_ROOT_PASSWORD untuk production
+#    - Ubah admin password di bench new-site
+#    - Jangan expose port database ke public
+#
+# 2. CUSTOM APPS:
+#    - Mount apps dari host ke container
+#    - Gunakan :z flag untuk SELinux compatibility
+#
+# 3. FRAPPE VERSION:
+#    - Ubah --frappe-branch untuk versi berbeda
+#    - Options: version-13, version-14, version-15, develop
+#
+# 4. SITE NAME:
+#    - Ubah development.localhost sesuai kebutuhan
+#    - Pastikan DNS mengarah ke server
+#
+# 5. PORTS:
+#    - 3306: MariaDB
+#    - 8000: Frappe Frontend (dev server)
+#    - 9000: Frappe Backend/Socketio (dev server)
+#    - 80: Nginx HTTP
+#    - 443: Nginx HTTPS (jika dikonfigurasi)
+#
+# 6. DEVELOPER MODE:
+#    - Enabled by default untuk development
+#    - Disable untuk production: bench set-config developer_mode 0
+#
+# 7. BACKUP:
+#    - Regular backup database: docker compose exec frappe bench --site site_name backup
+#    - Backup files disimpan di sites/site_name/private/backups/
+#
+# ============================================
