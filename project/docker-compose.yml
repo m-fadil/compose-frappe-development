@@ -1,0 +1,222 @@
+# Frappe Project Template
+# Copy file ini untuk setiap project baru, dan letakkan di folder yang berbeda
+
+services:
+  # ============================================
+  # FRAPPE INITIALIZATION
+  # ============================================
+  frappe-init:
+    image: docker.io/frappe/bench:latest
+    command:
+      - bash
+      - -c
+      - |
+        if [ ! -d "/home/frappe/frappe-bench/sites" ]; then
+          echo "Initializing bench...";
+          
+          bench init --skip-redis-config-generation --frappe-branch ${FRAPPE_BRANCH:-version-15} --ignore-exist frappe-bench;
+          cd frappe-bench;
+
+          echo "Configuring bench...";
+          bench set-config -g db_host frappe-mariadb;
+          bench set-config -g redis_cache redis://frappe-redis-cache:6379;
+          bench set-config -g redis_queue redis://frappe-redis-queue:6379;
+          bench set-config -g redis_socketio redis://frappe-redis-socketio:6379;
+
+          echo "Creating new site...";
+          bench new-site \
+            --db-root-username root \
+            --db-root-password ${MYSQL_ROOT_PASSWORD:-frappe_root_pass_123} \
+            --admin-password ${ADMIN_PASSWORD:-admin} \
+            --mariadb-user-host-login-scope="%" \
+            development.localhost;
+
+          echo "Setting developer mode...";
+          bench use development.localhost;
+          bench set-config developer_mode 1;
+          bench clear-cache;
+          bench setup nginx;
+
+          # TODO: Install custom apps jika ada
+          # echo "Installing custom apps...";
+          # bench get-app [app-name] [git-url]
+          # bench --site [project-name].localhost install-app [app-name]
+
+          echo "Initialization complete!";
+        else
+          echo "Bench already initialized, skipping...";
+        fi
+        echo "Exiting frappe-init container...";
+        exit 0
+    userns_mode: keep-id
+    environment:
+      - SHELL=/bin/bash
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-frappe_root_pass_123}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+    volumes:
+      - frappe-bench:/home/frappe/frappe-bench
+    working_dir: /home/frappe
+    networks:
+      - frappe-network
+
+  # ============================================
+  # FRAPPE MAIN SERVICE
+  # ============================================
+  frappe:
+    image: docker.io/frappe/bench:latest
+    depends_on:
+      frappe-init:
+        condition: service_completed_successfully
+    command: sleep infinity
+    userns_mode: keep-id
+    environment:
+      - SHELL=/bin/bash
+    volumes:
+      - frappe-bench:/home/frappe/frappe-bench
+
+      # TODO: Mount custom apps dari host
+      # Format: /absolute/path/on/host:/home/frappe/frappe-bench/apps/app_name:z
+      # Contoh untuk development:
+      # - ~/Projects/frappe/apps/frappe:/home/frappe/frappe-bench/apps/frappe:z
+      # - ~/Projects/frappe/apps/[your-app]:/home/frappe/frappe-bench/apps/[your-app]:z
+
+    working_dir: /home/frappe/frappe-bench
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+
+    # TODO: Uncomment dan sesuaikan port (hindari konflik antar project)
+    # ports:
+    #   - "8000:8000"  # Frontend (sesuaikan port host: 8001, 8002, dst)
+    #   - "9000:9000"  # Backend/Socketio
+
+    networks:
+      - frappe-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "bash", "-c", "[ -d /home/frappe/frappe-bench/sites ]"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================
+  # NGINX WEB SERVER
+  # ============================================
+  nginx:
+    image: docker.io/nginx:stable-perl
+    restart: unless-stopped
+    depends_on:
+      frappe-init:
+        condition: service_completed_successfully
+    networks:
+      - frappe-network
+    volumes:
+      - frappe-bench:/home/frappe/frappe-bench:z,ro
+      - nginx-config:/etc/nginx/conf.d
+
+    # TODO: Sesuaikan port untuk setiap project (hindari konflik)
+    ports:
+      - "8080:80" # HTTP (ubah 8080 ke 8081, 8082, dst untuk project lain)
+      # - "8443:443"  # HTTPS
+
+    command:
+      - /bin/sh
+      - -c
+      - |
+        if [ ! -f /etc/nginx/conf.d/frappe.conf ]; then
+          echo "frappe.conf not found, creating symlink...";
+          ln -sf /home/frappe/frappe-bench/config/nginx.conf /etc/nginx/conf.d/frappe.conf;
+        else
+          echo "frappe.conf already exists. Skipping symlink.";
+        fi;
+
+        echo "Testing nginx configuration..."
+        if nginx -t; then
+          echo "Nginx configuration test passed"
+          echo "Starting nginx..."
+          exec nginx -g "daemon off;"
+        else
+          echo "Nginx configuration test failed"
+          exit 1
+        fi
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================
+  # CLOUDFLARE TUNNEL (OPTIONAL)
+  # ============================================
+  # cloudflared:
+  #   image: docker.io/cloudflare/cloudflared:latest
+  #   restart: unless-stopped
+  #   networks:
+  #     - frappe-network
+  #   command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TOKEN}
+
+# ============================================
+# VOLUMES
+# ============================================
+volumes:
+  frappe-bench:
+    name: frappe-bench
+  nginx-config:
+    name: nginx-config
+
+# ============================================
+# NETWORKS (Gunakan network yang sama dengan infrastructure)
+# ============================================
+networks:
+  frappe-network:
+    external: true
+    name: frappe-network
+# ============================================
+# ENVIRONMENT VARIABLES
+# ============================================
+# Buat file .env di direktori yang sama dengan file ini:
+#
+# MYSQL_ROOT_PASSWORD=your_secure_password
+# ADMIN_PASSWORD=your_admin_password
+# CLOUDFLARE_TOKEN=your_cloudflare_token
+#
+# ============================================
+
+# ============================================
+# USAGE EXAMPLES
+# ============================================
+#
+# START PROJECT:
+#   docker compose up -d
+#
+# STOP PROJECT:
+#   docker compose down
+#
+# VIEW LOGS:
+#   docker compose logs -f
+#
+# ENTER CONTAINER:
+#   docker exec -it bash
+#
+# START BENCH:
+#   docker exec -it bench start
+#
+# CREATE NEW APP:
+#   docker exec -it bench new-app [app-name]
+#
+# INSTALL APP TO SITE:
+#   docker exec -it bench --site [project-name].localhost install-app [app-name]
+#
+# MIGRATE DATABASE:
+#   docker exec -it bench --site [project-name].localhost migrate
+#
+# CLEAR CACHE:
+#   docker exec -it bench clear-cache
+#
+# BACKUP SITE:
+#   docker exec -it bench --site [project-name].localhost backup
+#
+# RESTORE BACKUP:
+#   docker exec -it bench --site [project-name].localhost restore [backup-file]
+#
+# ============================================

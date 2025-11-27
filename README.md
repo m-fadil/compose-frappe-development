@@ -1,274 +1,456 @@
-# Frappe Development Environment with Docker
+# Frappe Multi-Project Docker Setup
 
-Dokumentasi lengkap untuk setup development environment Frappe Framework menggunakan Docker Compose.
+Setup development environment untuk multiple Frappe projects menggunakan shared infrastructure (Database & Redis).
 
-## 📋 Daftar Isi
+## 🎯 Konsep Arsitektur
 
-- [Persyaratan](#persyaratan)
-- [Struktur Project](#struktur-project)
-- [Komponen Services](#komponen-services)
-- [Cara Penggunaan](#cara-penggunaan)
-- [Konfigurasi](#konfigurasi)
-- [Troubleshooting](#troubleshooting)
-
-## 🔧 Persyaratan
-
-- Docker Engine 20.10+
-- Docker Compose v2.0+
-- Minimal 4GB RAM
-- 10GB disk space
-
-## 📁 Struktur Project
+Arsitektur ini memisahkan infrastruktur dari aplikasi:
 
 ```
-project-root/
-├── docker-compose.yml
-├── apps/
-│   ├── frappe/
-│   ├── your_custom_app/
-│   └── ...
+┌─────────────────────────────────────────────────────────────┐
+│                   SHARED INFRASTRUCTURE                     │
+│  ┌──────────┐  ┌───────────┐  ┌───────────┐  ┌──────────┐ │
+│  │ MariaDB  │  │Redis Cache│  │Redis Queue│  │Redis S.IO│ │
+│  └──────────┘  └───────────┘  └───────────┘  └──────────┘ │
+│                    (Jalan 1x saja)                          │
+└─────────────────────────────────────────────────────────────┘
+                             │
+        ┌────────────────────┼────────────────────┐
+        │                    │                    │
+   ┌────▼─────┐        ┌────▼─────┐        ┌────▼─────┐
+   │Project 1 │        │Project 2 │        │Project 3 │
+   │(Frappe+  │        │(ERPNext+ │        │(Custom   │
+   │ Nginx)   │        │ Nginx)   │        │ Apps +   │
+   │          │        │          │        │ Nginx)   │
+   │Port 8080 │        │Port 8081 │        │Port 8082 │
+   └──────────┘        └──────────┘        └──────────┘
+```
+
+### Keuntungan Arsitektur Ini:
+
+✅ **Resource Efficient**: Database & Redis hanya 1 instance untuk semua project  
+✅ **Easy Management**: Start/stop project secara independen  
+✅ **Cost Effective**: Hemat memory & CPU  
+✅ **Scalable**: Mudah menambah project baru  
+✅ **Isolated**: Setiap project punya volume & config sendiri  
+
+## 📁 Struktur Direktori
+
+```
+frappe-docker/
+├── docker-compose.infrastructure.yml   # Shared services
+├── docker-compose.project1.yml         # Project 1
+├── docker-compose.project2.yml         # Project 2
+├── .env                                # Environment variables
+├── apps/                               # Custom apps (optional)
+│   ├── project1_app/
+│   ├── project2_app/
+│   └── shared_app/
 └── README.md
 ```
 
-## 🏗️ Komponen Services
+## 🚀 Quick Start
 
-### 1. MariaDB
-Database server untuk Frappe
-- **Image**: mariadb:11.8
-- **Port**: 3306
-- **Root Password**: 123 (ubah di production!)
-- **Character Set**: utf8mb4
-
-### 2. Redis Cache & Queue
-Cache dan queue management
-- **redis-cache**: Untuk caching aplikasi
-- **redis-queue**: Untuk background jobs
-
-### 3. Frappe Init
-Container initialization untuk setup awal bench
-- Setup bench dengan Frappe v15
-- Membuat site development
-- Konfigurasi database dan redis
-- Setup nginx
-
-### 4. Frappe
-Container utama untuk development
-- Mount custom apps dari host
-- DNS configuration untuk connectivity
-- Developer mode enabled
-
-### 5. Nginx
-Web server sebagai reverse proxy
-- Serve static files
-- Route requests ke Frappe
-
-### 6. Cloudflared (Optional)
-Tunnel untuk expose local development ke internet
-
-## 🚀 Cara Penggunaan
-
-### Setup Awal
-
-1. **Clone repository dan masuk ke direktori project**
-   ```bash
-   cd ~/Projects/frappe/your_project
-   ```
-
-2. **Buat struktur folder untuk apps**
-   ```bash
-   mkdir -p ~/Projects/frappe/apps
-   ```
-
-3. **Start services**
-   ```bash
-   docker compose up -d
-   ```
-
-4. **Cek logs initialization**
-   ```bash
-   docker compose logs -f frappe-init
-   ```
-   Tunggu hingga muncul pesan "Initialization complete!"
-
-### Development Workflow
-
-1. **Masuk ke container Frappe**
-   ```bash
-   docker compose exec frappe bash
-   ```
-
-2. **Membuat custom app baru**
-   ```bash
-   bench new-app app_name
-   ```
-
-3. **Install app ke site**
-   ```bash
-   bench --site development.localhost install-app app_name
-   ```
-
-4. **Start development server**
-   ```bash
-   bench start
-   ```
-
-5. **Akses aplikasi**
-   - Frontend: http://development.localhost:8000
-   - Backend: http://development.localhost:9000
-
-### Command Berguna
+### 1. Setup Infrastructure (Sekali Saja)
 
 ```bash
-# Restart semua services
-docker compose restart
+# Clone atau download files
+git clone [your-repo-url]
+cd frappe-docker
 
-# Stop semua services
-docker compose down
+# Buat file .env
+cat > .env << EOF
+MYSQL_ROOT_PASSWORD=your_secure_password_here
+ADMIN_PASSWORD=your_admin_password_here
+EOF
 
-# Stop dan hapus volumes (HATI-HATI: data akan hilang)
-docker compose down -v
+# Start shared infrastructure
+docker compose -f docker-compose.infrastructure.yml up -d
 
-# Lihat logs service tertentu
-docker compose logs -f frappe
+# Cek status
+docker compose -f docker-compose.infrastructure.yml ps
+```
 
-# Update bench dan apps
-docker compose exec frappe bench update
+### 2. Setup Project Pertama
 
-# Backup site
-docker compose exec frappe bench --site development.localhost backup
+```bash
+# Copy template
+cp docker-compose.project.yml docker-compose.alpha-fitness.yml
 
-# Restore backup
-docker compose exec frappe bench --site development.localhost restore /path/to/backup
+# Edit file dan ganti semua [project-name] dengan alpha-fitness
+# Gunakan search & replace di editor Anda
 
-# Migrate database
-docker compose exec frappe bench --site development.localhost migrate
+# Start project
+docker compose -f docker-compose.alpha-fitness.yml up -d
+
+# Monitor logs
+docker compose -f docker-compose.alpha-fitness.yml logs -f frappe-init-alpha-fitness
+
+# Tunggu sampai selesai initialization
+```
+
+### 3. Akses Aplikasi
+
+```bash
+# Via Nginx (production-like)
+http://localhost:8080
+
+# Atau jalankan bench start untuk development
+docker exec -it frappe-alpha-fitness bash
+bench start
+# Lalu akses: http://localhost:8001
+```
+
+**Login Credentials:**
+- Username: `Administrator`
+- Password: (sesuai ADMIN_PASSWORD di .env, default: `admin`)
+
+## 📝 Cara Membuat Project Baru
+
+### Step-by-Step:
+
+```bash
+# 1. Copy template
+cp docker-compose.project.yml docker-compose.myproject.yml
+
+# 2. Replace semua [project-name] dengan myproject
+# Linux/Mac:
+sed -i 's/\[project-name\]/myproject/g' docker-compose.myproject.yml
+
+# Windows (gunakan editor):
+# Find & Replace: [project-name] → myproject
+
+# 3. Sesuaikan port agar tidak konflik
+# Edit section ports di nginx-myproject:
+#   ports:
+#     - "8081:80"  # Gunakan 8081, 8082, dst (bukan 8080 lagi)
+
+# 4. (Optional) Mount custom apps
+# Edit section volumes di frappe-myproject:
+#   volumes:
+#     - ~/Projects/frappe/apps/myapp:/home/frappe/frappe-bench/apps/myapp:z
+
+# 5. Start project
+docker compose -f docker-compose.myproject.yml up -d
+
+# 6. Cek logs
+docker compose -f docker-compose.myproject.yml logs -f
+```
+
+## 🛠️ Management Commands
+
+### Infrastructure Commands
+
+```bash
+# Status
+docker compose -f docker-compose.infrastructure.yml ps
+
+# Logs
+docker compose -f docker-compose.infrastructure.yml logs -f
+
+# Restart
+docker compose -f docker-compose.infrastructure.yml restart
+
+# Stop (HATI-HATI: Akan stop semua project)
+docker compose -f docker-compose.infrastructure.yml down
+
+# Backup Database
+docker exec frappe-mariadb mysqldump -uroot -p[password] --all-databases > backup-$(date +%Y%m%d).sql
+
+# Restore Database
+docker exec -i frappe-mariadb mysql -uroot -p[password] < backup-20241126.sql
+```
+
+### Project Commands
+
+```bash
+# Ganti [project] dengan nama project Anda (contoh: alpha-fitness)
+
+# Start
+docker compose -f docker-compose.[project].yml up -d
+
+# Stop
+docker compose -f docker-compose.[project].yml down
+
+# Restart
+docker compose -f docker-compose.[project].yml restart
+
+# Logs
+docker compose -f docker-compose.[project].yml logs -f
+
+# Remove (termasuk volumes)
+docker compose -f docker-compose.[project].yml down -v
+```
+
+### Development Commands
+
+```bash
+# Enter container
+docker exec -it frappe-[project] bash
+
+# Start bench (development server)
+bench start
+
+# Create new app
+bench new-app myapp
+
+# Install app to site
+bench --site [project].localhost install-app myapp
+
+# Get app from git
+bench get-app [app-name] [git-url]
+
+# Migrate
+bench --site [project].localhost migrate
 
 # Clear cache
-docker compose exec frappe bench clear-cache
+bench clear-cache
+
+# Console
+bench --site [project].localhost console
+
+# Update bench & apps
+bench update
+
+# Backup
+bench --site [project].localhost backup
+
+# Restore
+bench --site [project].localhost restore /path/to/backup.sql
 ```
 
-## ⚙️ Konfigurasi
+## 🔧 Configuration Guide
 
-### Custom Apps
+### Port Allocation
 
-Edit `docker-compose.yml` pada bagian volumes service `frappe`:
+Untuk menghindari konflik, alokasikan port berbeda untuk setiap project:
 
-```yaml
-volumes:
-  - frappe-bench-data:/home/frappe/frappe-bench
-  - /path/to/your/app1:/home/frappe/frappe-bench/apps/app1:z
-  - /path/to/your/app2:/home/frappe/frappe-bench/apps/app2:z
-```
+| Project        | Nginx HTTP | Dev Frontend | Dev Backend |
+|----------------|------------|--------------|-------------|
+| Project 1      | 8080       | 8001         | 9001        |
+| Project 2      | 8081       | 8002         | 9002        |
+| Project 3      | 8082       | 8003         | 9003        |
+| Infrastructure | 3306       | -            | -           |
 
 ### Environment Variables
 
-Ubah password default di production:
-
-```yaml
-environment:
-  MYSQL_ROOT_PASSWORD: your_secure_password
-```
-
-Dan sesuaikan command di `frappe-init`:
+Buat file `.env` di root directory:
 
 ```bash
-bench new-site --db-root-password your_secure_password ...
+# Database
+MYSQL_ROOT_PASSWORD=super_secure_password_123
+
+# Frappe Admin
+ADMIN_PASSWORD=admin_secure_password
+
+# Cloudflare (optional)
+CLOUDFLARE_TOKEN=your_cloudflare_tunnel_token
 ```
 
-### Port Mapping
+### Custom Apps Development
 
-Uncomment untuk expose port ke host:
+Untuk development dengan custom apps:
 
 ```yaml
-ports:
-  - "8000:8000"  # Frontend
-  - "9000:9000"  # Backend/Socketio
+# Di docker-compose.[project].yml, section frappe-[project]:
+volumes:
+  - frappe-bench-[project]:/home/frappe/frappe-bench
+  # Mount apps untuk development
+  - ~/Projects/frappe/apps/frappe:/home/frappe/frappe-bench/apps/frappe:z
+  - ~/Projects/frappe/apps/myapp:/home/frappe/frappe-bench/apps/myapp:z
 ```
 
-### Cloudflare Tunnel
-
-Ganti token dengan token Anda sendiri atau hapus service jika tidak diperlukan:
-
-```yaml
-command: tunnel --no-autoupdate run --token YOUR_TOKEN_HERE
-```
+**Note:** `:z` flag diperlukan untuk SELinux (Fedora/RHEL/CentOS)
 
 ## 🔍 Troubleshooting
 
-### Container frappe-init tidak complete
+### Infrastructure tidak start
 
 ```bash
 # Cek logs
-docker compose logs frappe-init
+docker compose -f docker-compose.infrastructure.yml logs
 
-# Restart initialization
-docker compose down
-docker volume rm your_project_frappe-bench-data
-docker compose up -d
+# Cek apakah port 3306 sudah dipakai
+sudo ss -tulpn | grep 3306
+
+# Stop service yang conflict
+sudo systemctl stop mariadb  # atau mysql
 ```
 
-### Permission Issues
+### Project initialization gagal
 
 ```bash
-# Masuk sebagai root
-docker compose exec -u root frappe bash
+# Cek logs detail
+docker compose -f docker-compose.[project].yml logs frappe-init-[project]
 
-# Fix permissions
-chown -R frappe:frappe /home/frappe/frappe-bench
+# Hapus volume dan coba lagi
+docker compose -f docker-compose.[project].yml down -v
+docker compose -f docker-compose.[project].yml up -d
 ```
 
-### Database Connection Error
+### Database connection error
 
 ```bash
-# Cek apakah MariaDB sudah ready
-docker compose exec mariadb mysqladmin -uroot -p123 ping
+# Pastikan infrastructure running
+docker ps | grep frappe-mariadb
 
-# Test koneksi dari container frappe
-docker compose exec frappe bench --site development.localhost mariadb
+# Test connection
+docker exec -it frappe-mariadb mysql -uroot -p
+
+# Cek dari container frappe
+docker exec -it frappe-[project] bash
+mysql -h frappe-mariadb -uroot -p
+```
+
+### Permission denied saat mount volumes
+
+```bash
+# Set SELinux context (Linux)
+chcon -Rt svirt_sandbox_file_t ~/Projects/frappe/apps/
+
+# Atau disable SELinux temporarily (not recommended)
+sudo setenforce 0
+```
+
+### Port already in use
+
+```bash
+# Cek port yang digunakan
+sudo ss -tulpn | grep 8080
+
+# Kill process atau ubah port di docker-compose file
 ```
 
 ### Nginx 404 Error
 
 ```bash
 # Regenerate nginx config
-docker compose exec frappe bench setup nginx
-docker compose restart nginx
+docker exec -it frappe-[project] bash
+bench setup nginx
+
+# Restart nginx
+docker compose -f docker-compose.[project].yml restart nginx-[project]
 ```
 
-### Port Already in Use
+## 📊 Monitoring
+
+### Resource Usage
 
 ```bash
-# Cek port yang digunakan
-sudo ss -tulpn | grep :8000
+# Lihat resource usage semua container
+docker stats
 
-# Kill process atau ubah port mapping di docker-compose.yml
+# Lihat resource usage infrastructure
+docker stats frappe-mariadb frappe-redis-cache frappe-redis-queue
+
+# Lihat disk usage
+docker system df -v
 ```
 
-## 🔐 Security Notes
+### Health Check
 
-⚠️ **PENTING untuk Production:**
+```bash
+# Cek health semua services
+docker ps --format "table {{.Names}}\t{{.Status}}"
 
-1. Ubah semua password default
-2. Gunakan environment variables untuk credentials
-3. Enable SSL/TLS
-4. Batasi network exposure
-5. Regular backup database
-6. Update image secara berkala
+# Cek logs error
+docker compose -f docker-compose.infrastructure.yml logs --tail=100 | grep -i error
+```
 
-## 📚 Referensi
+## 🔐 Security Best Practices
+
+### Production Checklist:
+
+- [ ] Ubah semua default passwords
+- [ ] Gunakan strong passwords di `.env`
+- [ ] Jangan commit `.env` ke git (sudah ada di `.gitignore`)
+- [ ] Disable developer mode: `bench set-config developer_mode 0`
+- [ ] Setup SSL/TLS untuk production
+- [ ] Batasi port exposure (hapus port mapping yang tidak perlu)
+- [ ] Regular database backup
+- [ ] Update images secara berkala
+- [ ] Monitor logs untuk aktivitas mencurigakan
+- [ ] Gunakan firewall untuk membatasi akses
+
+### Backup Strategy:
+
+```bash
+# Backup script example
+#!/bin/bash
+DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR="./backups"
+
+# Database backup
+docker exec frappe-mariadb mysqldump -uroot -p$MYSQL_ROOT_PASSWORD --all-databases | gzip > $BACKUP_DIR/db_$DATE.sql.gz
+
+# Sites backup (untuk setiap project)
+docker exec frappe-[project] bench --site [project].localhost backup
+```
+
+## 🔄 Update & Maintenance
+
+### Update Frappe
+
+```bash
+# Enter container
+docker exec -it frappe-[project] bash
+
+# Update bench
+bench update
+
+# Update specific app
+bench update --apps frappe
+
+# Migrate after update
+bench --site [project].localhost migrate
+```
+
+### Update Docker Images
+
+```bash
+# Pull latest images
+docker compose -f docker-compose.infrastructure.yml pull
+docker compose -f docker-compose.[project].yml pull
+
+# Recreate containers
+docker compose -f docker-compose.infrastructure.yml up -d
+docker compose -f docker-compose.[project].yml up -d
+```
+
+## 📚 Additional Resources
 
 - [Frappe Framework Documentation](https://frappeframework.com/docs)
-- [Frappe Docker Hub](https://hub.docker.com/r/frappe/bench)
+- [Frappe Docker GitHub](https://github.com/frappe/frappe_docker)
 - [ERPNext Documentation](https://docs.erpnext.com/)
+- [Docker Documentation](https://docs.docker.com/)
+
+## 🤝 Contributing
+
+Kontribusi sangat diterima! Silakan:
+
+1. Fork repository ini
+2. Buat branch untuk fitur Anda (`git checkout -b feature/AmazingFeature`)
+3. Commit changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push ke branch (`git push origin feature/AmazingFeature`)
+5. Buat Pull Request
 
 ## 📄 License
 
 Sesuaikan dengan license project Anda.
 
-## 🤝 Contributing
+## 💬 Support
 
-Kontribusi sangat diterima! Silakan buat issue atau pull request.
+Jika Anda menemukan bug atau punya pertanyaan:
+
+- Buat [Issue](https://github.com/your-repo/issues)
+- Atau hubungi via [Email](mailto:your-email@example.com)
+
+## 🎯 Roadmap
+
+- [ ] Add monitoring dengan Prometheus & Grafana
+- [ ] Add automated backup script
+- [ ] Add CI/CD pipeline example
+- [ ] Add Kubernetes deployment option
+- [ ] Add production deployment guide
 
 ---
-
-**Dibuat dengan ❤️ untuk Frappe Community**
