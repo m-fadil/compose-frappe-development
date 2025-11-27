@@ -1,5 +1,8 @@
 theme = "onedark"
 
+[editor]
+true-color = true
+
 [editor.cursor-shape]
 insert = "bar"
 normal = "block"
