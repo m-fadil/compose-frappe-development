@@ -9,21 +9,21 @@ Arsitektur ini memisahkan infrastruktur dari aplikasi:
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                   SHARED INFRASTRUCTURE                     │
-│  ┌──────────┐  ┌───────────┐  ┌───────────┐  ┌──────────┐ │
-│  │ MariaDB  │  │Redis Cache│  │Redis Queue│  │Redis S.IO│ │
-│  └──────────┘  └───────────┘  └───────────┘  └──────────┘ │
+│  ┌──────────┐  ┌───────────┐  ┌───────────┐  ┌──────────┐   │
+│  │ MariaDB  │  │Redis Cache│  │Redis Queue│  │Redis S.IO│   │
+│  └──────────┘  └───────────┘  └───────────┘  └──────────┘   │
 │                    (Jalan 1x saja)                          │
 └─────────────────────────────────────────────────────────────┘
-                             │
-        ┌────────────────────┼────────────────────┐
-        │                    │                    │
-   ┌────▼─────┐        ┌────▼─────┐        ┌────▼─────┐
-   │Project 1 │        │Project 2 │        │Project 3 │
-   │(Frappe+  │        │(ERPNext+ │        │(Custom   │
-   │ Nginx)   │        │ Nginx)   │        │ Apps +   │
-   │          │        │          │        │ Nginx)   │
-   │Port 8080 │        │Port 8081 │        │Port 8082 │
-   └──────────┘        └──────────┘        └──────────┘
+                          │
+         ┌────────────────┼────────────────┐
+         │                │                │
+    ┌────▼─────┐    ┌────▼─────┐    ┌────▼─────┐
+    │Project 1 │    │Project 2 │    │Project 3 │
+    │(Frappe+  │    │(ERPNext+ │    │(Custom   │
+    │ Nginx)   │    │ Nginx)   │    │ Apps +   │
+    │          │    │          │    │ Nginx)   │
+    │Port 8080 │    │Port 8081 │    │Port 8082 │
+    └──────────┘    └──────────┘    └──────────┘
 ```
 
 ### Keuntungan Arsitektur Ini:
@@ -41,12 +41,11 @@ frappe-docker/
 ├── docker-compose.yml                  # Shared infrastructure services (MariaDB, Redis)
 ├── project/
 │   └── docker-compose.yml              # Template untuk setiap project Frappe
-├── .env                                # Environment variables
+├── .env.example                        # Contoh file konfigurasi environment
 ├── apps/                               # Custom apps (optional)
 │   ├── project1_app/
 │   ├── project2_app/
 │   └── shared_app/
-└── README.md
 └── my-frappe-project/                  # Contoh direktori untuk Project 1
     └── docker-compose.yml              # Konfigurasi Docker Compose untuk Project 1
 ```
@@ -60,11 +59,11 @@ frappe-docker/
 git clone [your-repo-url]
 cd frappe-docker
 
-# Buat file .env di root directory
-cat > .env << EOF
-MYSQL_ROOT_PASSWORD=your_secure_password_here
-ADMIN_PASSWORD=your_admin_password_here
-EOF
+# Buat file .env untuk infrastruktur dari contoh
+cp .env.example .env
+
+# Edit file .env sesuai kebutuhan (ubah MYSQL_ROOT_PASSWORD)
+nano .env
 
 # Start shared infrastructure
 docker compose up -d
@@ -106,14 +105,14 @@ docker compose -f my-frappe-project/docker-compose.yml logs -f frappe-init
 http://localhost:8080
 
 # Atau jalankan bench start untuk development
-docker exec -it my-frappe-project-frappe-1 bash # Ganti 'my-frappe-project-frappe-1' dengan nama container frappe Anda
+docker exec -it my-frappe-project-frappe-1 bash # Ganti dengan nama container frappe Anda
 bench start
 # Lalu akses: http://localhost:8000 (jika port 8000 di-expose)
 ```
 
 **Login Credentials:**
 - Username: `Administrator`
-- Password: (sesuai ADMIN_PASSWORD di .env, default: `admin`)
+- Password: (sesuai ADMIN_PASSWORD di .env project, default: `admin`)
 
 ## 📝 Cara Membuat Project Baru
 
@@ -250,13 +249,9 @@ Buat file `.env` di root directory `frappe-docker`:
 ```bash
 # Database
 MYSQL_ROOT_PASSWORD=super_secure_password_123
-
-# Frappe Admin
-ADMIN_PASSWORD=admin_secure_password
-
-# Cloudflare (optional)
-CLOUDFLARE_TOKEN=your_cloudflare_tunnel_token
 ```
+
+Catatan: Setiap project akan memiliki file `.env` tersendiri di direktori projectnya dengan variabel tambahan seperti `ADMIN_PASSWORD` dan `CLOUDFLARE_TOKEN`.
 
 ### Custom Apps Development
 
