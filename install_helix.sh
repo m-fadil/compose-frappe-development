@@ -7,7 +7,6 @@ HELIX_TARBALL_URL="https://github.com/helix-editor/helix/releases/download/25.07
 HELIX_TARBALL="helix-25.07.1-x86_64-linux.tar.xz"
 HELIX_SHARE_DIR="/usr/local/share/helix"
 HELIX_RUNTIME_DIR="$HELIX_SHARE_DIR/runtime"
-CONFIG_REPO="https://github.com/m-fadil/compose-frappe-development.git"
 
 echo "Pindah ke home directory..."
 cd "$HOME"
@@ -62,24 +61,6 @@ rm -f "$HELIX_TARBALL"
 # Hapus folder ekstraksi jika masih ada
 if [ -d "helix-25.07.1-x86_64-linux" ]; then
   rm -rf "helix-25.07.1-x86_64-linux"
-fi
-
-echo "Membuat direktori temporary untuk clone..."
-TMP_DIR="$(mktemp -d)"
-
-# Trap untuk memastikan cleanup berjalan meskipun ada error
-trap "rm -rf '$TMP_DIR'" EXIT
-
-echo "Clone repository konfigurasi ke $TMP_DIR..."
-git clone "$CONFIG_REPO" "$TMP_DIR"
-
-echo "Menyalin file konfigurasi ke ~/.config/helix..."
-# Salin semua file dari config/helix ke ~/.config/helix (timpa jika ada)
-if [ -d "$TMP_DIR/config/helix" ]; then
-  cp -rf "$TMP_DIR/config/helix/"* "$HOME/.config/helix/"
-  echo "File konfigurasi berhasil disalin."
-else
-  echo "Warning: Folder config/helix tidak ditemukan di repository."
 fi
 
 echo "Instalasi selesai. hx dan Helix runtime telah terpasang."
