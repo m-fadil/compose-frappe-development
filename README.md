@@ -82,8 +82,12 @@ cd my-frappe-project
 # Copy template docker-compose.yml dari direktori 'project'
 cp ../project/docker-compose.yml docker-compose.yml
 
-# Edit file docker-compose.yml di direktori 'my-frappe-project'
-# Ganti semua 'development.localhost' dengan nama site Anda (misal: alpha-fitness.localhost)
+# Buat file .env dan sesuaikan SITE_NAME dengan nama site Anda
+# Contoh isi .env:
+# MYSQL_ROOT_PASSWORD=your_secure_password
+# ADMIN_PASSWORD=your_admin_password
+# SITE_NAME=alpha-fitness.localhost
+
 # Sesuaikan port Nginx (misal: "8080:80") agar tidak konflik dengan project lain
 
 # Kembali ke root directory frappe-docker
@@ -126,8 +130,10 @@ cd myproject
 # 2. Copy template docker-compose.yml dari direktori 'project'
 cp ../project/docker-compose.yml docker-compose.yml
 
-# 3. Edit file docker-compose.yml di direktori 'myproject'
-#    Ganti semua 'development.localhost' dengan nama site Anda (misal: myproject.localhost)
+# 3. Buat file .env dan sesuaikan variabel berikut:
+#    - SITE_NAME: Nama site Anda (misal: myproject.localhost)
+#    - ADMIN_PASSWORD: Password untuk user Administrator
+#    - MYSQL_ROOT_PASSWORD: Harus sama dengan yang di infrastruktur
 #    Sesuaikan port Nginx agar tidak konflik dengan project lain (misal: "8081:80")
 
 # 4. (Optional) Mount custom apps
@@ -205,12 +211,14 @@ bench start
 bench new-app myapp
 
 # Install app to site (ganti [project-name].localhost dengan nama site Anda)
+# Nama site dapat dilihat di file .env project Anda (variabel SITE_NAME)
 bench --site [project-name].localhost install-app myapp
 
 # Get app from git
 bench get-app [app-name] [git-url]
 
 # Migrate
+# Nama site dapat dilihat di file .env project Anda (variabel SITE_NAME)
 bench --site [project-name].localhost migrate
 
 # Clear cache
@@ -223,9 +231,11 @@ bench --site [project-name].localhost console
 bench update
 
 # Backup
+# Nama site dapat dilihat di file .env project Anda (variabel SITE_NAME)
 bench --site [project-name].localhost backup
 
 # Restore
+# Nama site dapat dilihat di file .env project Anda (variabel SITE_NAME)
 bench --site [project-name].localhost restore /path/to/backup.sql
 ```
 
@@ -251,7 +261,7 @@ Buat file `.env` di root directory `frappe-docker`:
 MYSQL_ROOT_PASSWORD=super_secure_password_123
 ```
 
-Catatan: Setiap project akan memiliki file `.env` tersendiri di direktori projectnya dengan variabel tambahan seperti `ADMIN_PASSWORD` dan `CLOUDFLARE_TOKEN`.
+Catatan: Setiap project akan memiliki file `.env` tersendiri di direktori projectnya dengan variabel tambahan seperti `ADMIN_PASSWORD`, `SITE_NAME`, dan `CLOUDFLARE_TOKEN`.
 
 ### Custom Apps Development
 
@@ -328,6 +338,8 @@ sudo ss -tulpn | grep 8080
 
 ### Nginx 404 Error
 
+Pastikan SITE_NAME di file .env project Anda sesuai dengan konfigurasi site yang ada.
+
 ```bash
 # Regenerate nginx config (ganti [project-dir]-frappe-1 dengan nama container frappe Anda)
 docker exec -it [project-dir]-frappe-1 bash
@@ -389,6 +401,7 @@ BACKUP_DIR="./backups"
 docker exec frappe-mariadb mysqldump -uroot -p$MYSQL_ROOT_PASSWORD --all-databases | gzip > $BACKUP_DIR/db_$DATE.sql.gz
 
 # Sites backup (untuk setiap project, ganti [project-dir]-frappe-1 dan [project-name].localhost)
+# [project-name].localhost harus sesuai dengan SITE_NAME di file .env project Anda
 docker exec frappe-[project-dir]-frappe-1 bench --site [project-name].localhost backup
 ```
 
@@ -407,6 +420,7 @@ bench update
 bench update --apps frappe
 
 # Migrate after update
+# [project-name].localhost harus sesuai dengan SITE_NAME di file .env project Anda
 bench --site [project-name].localhost migrate
 ```
 

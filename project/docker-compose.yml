@@ -29,10 +29,10 @@ services:
             --db-root-password ${MYSQL_ROOT_PASSWORD:-frappe_root_pass_123} \
             --admin-password ${ADMIN_PASSWORD:-admin} \
             --mariadb-user-host-login-scope="%" \
-            development.localhost;
+            ${SITE_NAME:-development.localhost};
 
           echo "Setting developer mode...";
-          bench use development.localhost;
+          bench use ${SITE_NAME:-development.localhost};
           bench set-config developer_mode 1;
           bench clear-cache;
           bench setup nginx;
@@ -178,6 +178,7 @@ networks:
 #
 # MYSQL_ROOT_PASSWORD=your_secure_password
 # ADMIN_PASSWORD=your_admin_password
+# SITE_NAME=your_site_name.localhost
 # CLOUDFLARE_TOKEN=your_cloudflare_token
 #
 # ============================================
@@ -206,17 +207,21 @@ networks:
 #
 # INSTALL APP TO SITE:
 #   docker exec -it bench --site [project-name].localhost install-app [app-name]
+#   Note: [project-name].localhost should match your SITE_NAME in .env
 #
 # MIGRATE DATABASE:
 #   docker exec -it bench --site [project-name].localhost migrate
+#   Note: [project-name].localhost should match your SITE_NAME in .env
 #
 # CLEAR CACHE:
 #   docker exec -it bench clear-cache
 #
 # BACKUP SITE:
 #   docker exec -it bench --site [project-name].localhost backup
+#   Note: [project-name].localhost should match your SITE_NAME in .env
 #
 # RESTORE BACKUP:
 #   docker exec -it bench --site [project-name].localhost restore [backup-file]
+#   Note: [project-name].localhost should match your SITE_NAME in .env
 #
 # ============================================
