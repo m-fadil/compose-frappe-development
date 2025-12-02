@@ -160,9 +160,7 @@ services:
 # ============================================
 volumes:
   frappe-bench:
-    name: frappe-bench
   nginx-config:
-    name: nginx-config
 
 # ============================================
 # NETWORKS (Gunakan network yang sama dengan infrastructure)
