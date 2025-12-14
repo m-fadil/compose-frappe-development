@@ -447,7 +447,7 @@ docker compose -f [project-dir]/docker-compose.yml up -d
 Untuk memasang Helix Editor, jalankan perintah berikut:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/m-fadil/compose-frappe-development/refs/heads/main/install_helix.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/m-fadil/setup-helix/refs/heads/master/install.sh)
 ```
 
 ## 📚 Additional Resources

@@ -29,10 +29,10 @@ services:
             --db-root-password ${MYSQL_ROOT_PASSWORD:-frappe_root_pass_123} \
             --admin-password ${ADMIN_PASSWORD:-admin} \
             --mariadb-user-host-login-scope="%" \
-            ${SITE_NAME:-development.localhost};
+            ${SITE_NAME:-myproject.local};
 
           echo "Setting developer mode...";
-          bench use ${SITE_NAME:-development.localhost};
+          bench use ${SITE_NAME:-myproject.local};
           bench set-config developer_mode 1;
           bench clear-cache;
           bench setup nginx;
