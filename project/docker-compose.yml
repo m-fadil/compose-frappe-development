@@ -3,6 +3,53 @@
 
 services:
   # ============================================
+  # REDIS CACHE
+  # ============================================
+  redis-cache:
+    image: docker.io/redis:7-alpine
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    networks:
+      - internal-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # REDIS QUEUE
+  # ============================================
+  redis-queue:
+    image: docker.io/redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-queue-data:/data
+    networks:
+      - internal-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # REDIS SOCKETIO (Optional)
+  # ============================================
+  redis-socketio:
+    image: docker.io/redis:7-alpine
+    networks:
+      - internal-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  # ============================================
   # FRAPPE INITIALIZATION
   # ============================================
   frappe-init:
@@ -18,10 +65,10 @@ services:
           cd frappe-bench;
 
           echo "Configuring bench...";
-          bench set-config -g db_host frappe-mariadb;
-          bench set-config -g redis_cache redis://frappe-redis-cache:6379;
-          bench set-config -g redis_queue redis://frappe-redis-queue:6379;
-          bench set-config -g redis_socketio redis://frappe-redis-socketio:6379;
+          bench set-config -g db_host mariadb;
+          bench set-config -g redis_cache redis://redis-cache:6379;
+          bench set-config -g redis_queue redis://redis-queue:6379;
+          bench set-config -g redis_socketio redis://redis-socketio:6379;
 
           echo "Creating new site...";
           bench new-site \
@@ -29,10 +76,10 @@ services:
             --db-root-password ${MYSQL_ROOT_PASSWORD:-frappe_root_pass_123} \
             --admin-password ${ADMIN_PASSWORD:-admin} \
             --mariadb-user-host-login-scope="%" \
-            ${SITE_NAME:-myproject.local};
+            ${SITE_NAME:-platform.local};
 
           echo "Setting developer mode...";
-          bench use ${SITE_NAME:-myproject.local};
+          bench use ${SITE_NAME:-platform.local};
           bench set-config developer_mode 1;
           bench clear-cache;
           bench setup nginx;
@@ -57,13 +104,15 @@ services:
       - frappe-bench:/home/frappe/frappe-bench
     working_dir: /home/frappe
     networks:
-      - frappe-network
+      - infra-network
+      - internal-network
 
   # ============================================
   # FRAPPE MAIN SERVICE
   # ============================================
   frappe:
     image: docker.io/frappe/bench:latest
+    hostname: ${COMPOSE_PROJECT_NAME:-dev}
     depends_on:
       frappe-init:
         condition: service_completed_successfully
@@ -84,14 +133,15 @@ services:
     dns:
       - 8.8.8.8
       - 8.8.4.4
+    networks:
+      - infra-network
+      - internal-network
 
     # TODO: Uncomment dan sesuaikan port (hindari konflik antar project)
     # ports:
     #   - "8000:8000"  # Frontend (sesuaikan port host: 8001, 8002, dst)
     #   - "9000:9000"  # Backend/Socketio
 
-    networks:
-      - frappe-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "bash", "-c", "[ -d /home/frappe/frappe-bench/sites ]"]
@@ -108,12 +158,18 @@ services:
     depends_on:
       frappe-init:
         condition: service_completed_successfully
-    networks:
-      - frappe-network
     volumes:
       - frappe-bench:/home/frappe/frappe-bench:z,ro
       - nginx-config:/etc/nginx/conf.d
 
+      # TODO: Mount custom apps dari host untuk build assets
+      # Format: /absolute/path/on/host:/home/frappe/frappe-bench/apps/app_name:z
+      # Contoh untuk development:
+      # - ~/Projects/frappe/apps/frappe:/home/frappe/frappe-bench/apps/frappe:z
+      # - ~/Projects/frappe/apps/[your-app]:/home/frappe/frappe-bench/apps/[your-app]:z
+
+    networks:
+      - internal-network
     # TODO: Sesuaikan port untuk setiap project (hindari konflik)
     ports:
       - "8080:80" # HTTP (ubah 8080 ke 8081, 8082, dst untuk project lain)
@@ -151,9 +207,9 @@ services:
   # cloudflared:
   #   image: docker.io/cloudflare/cloudflared:latest
   #   restart: unless-stopped
+  #   command: tunnel run --token ${CLOUDFLARE_TOKEN}
   #   networks:
-  #     - frappe-network
-  #   command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TOKEN}
+  #     - internal-network
 
 # ============================================
 # VOLUMES
@@ -161,14 +217,16 @@ services:
 volumes:
   frappe-bench:
   nginx-config:
+  redis-queue-data:
 
 # ============================================
 # NETWORKS (Gunakan network yang sama dengan infrastructure)
 # ============================================
 networks:
-  frappe-network:
+  infra-network:
     external: true
-    name: frappe-network
+  internal-network:
+
 # ============================================
 # ENVIRONMENT VARIABLES
 # ============================================
@@ -180,6 +238,8 @@ networks:
 # CLOUDFLARE_TOKEN=your_cloudflare_token
 #
 # ============================================
+
+
 
 # ============================================
 # USAGE EXAMPLES

@@ -7,7 +7,7 @@ services:
   # MARIADB DATABASE
   # ============================================
   mariadb:
-    container_name: frappe-mariadb
+    container_name: mariadb
     image: docker.io/mariadb:11.8
     command:
       - --character-set-server=utf8mb4
@@ -27,7 +27,8 @@ services:
     ports:
       - "3306:3306"
     networks:
-      - frappe-network
+      - infra-network
+
     restart: unless-stopped
     healthcheck:
       test:
@@ -45,79 +46,18 @@ services:
       timeout: 5s
       retries: 5
 
-  # ============================================
-  # REDIS CACHE
-  # ============================================
-  redis-cache:
-    container_name: frappe-redis-cache
-    image: docker.io/redis:7-alpine
-    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
-    volumes:
-      - frappe-redis-cache-data:/data
-    networks:
-      - frappe-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # ============================================
-  # REDIS QUEUE
-  # ============================================
-  redis-queue:
-    container_name: frappe-redis-queue
-    image: docker.io/redis:7-alpine
-    command: redis-server --appendonly yes
-    volumes:
-      - frappe-redis-queue-data:/data
-    networks:
-      - frappe-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # ============================================
-  # REDIS SOCKETIO (Optional)
-  # ============================================
-  redis-socketio:
-    container_name: frappe-redis-socketio
-    image: docker.io/redis:7-alpine
-    volumes:
-      - frappe-redis-socketio-data:/data
-    networks:
-      - frappe-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
 # ============================================
 # VOLUMES
 # ============================================
 volumes:
   frappe-mariadb-data:
-    name: frappe-mariadb-data
-  frappe-redis-cache-data:
-    name: frappe-redis-cache-data
-  frappe-redis-queue-data:
-    name: frappe-redis-queue-data
-  frappe-redis-socketio-data:
-    name: frappe-redis-socketio-data
 
 # ============================================
 # NETWORKS
 # ============================================
 networks:
-  frappe-network:
-    name: frappe-network
-    driver: bridge
+  infra-network:
+    external: true
 
 # ============================================
 # USAGE NOTES
