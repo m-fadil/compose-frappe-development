@@ -172,7 +172,7 @@ services:
       - internal-network
     # TODO: Sesuaikan port untuk setiap project (hindari konflik)
     ports:
-      - "8080:80" # HTTP (ubah 8080 ke 8081, 8082, dst untuk project lain)
+      - "8080:8080" # HTTP (ubah 8080 ke 8081, 8082, dst untuk project lain)
       # - "8443:443"  # HTTPS
 
     command:
